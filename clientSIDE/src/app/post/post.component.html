@@ -1,0 +1,45 @@
+<div class="bgcolor">
+    <form (ngSubmit)="httpsrv.login(newForm.value)" novalidate="true" #newForm="ngForm">
+        <label>
+            <strong>NIP:</strong>
+            <input type="text" [(ngModel)]="user.nip" name="nip">
+        </label>
+        <label>
+            <strong>PASSWORD:</strong>
+            <input type="password" [(ngModel)]="user.password" name="password">
+        </label>
+        <input type="submit" class="button" value="LOGIN">
+    </form>
+    <p *ngIf="httpsrv.token"><strong>Received token:</strong> {{httpsrv.token}}</p>
+</div>
+
+<div class="bgcolor2">
+    <button (click)="httpsrv.getUser()">GET USER DATA</button>
+    <p *ngIf="!httpsrv.token">First you must LOGIN</p>
+    <p *ngIf="httpsrv.receivedGetData"><strong>Received data:</strong></p>
+    <ul>
+        <li *ngFor="let recData of httpsrv.receivedGetData">{{recData |json}}
+            <app-select [listData]="recData"></app-select>
+        </li>
+    </ul>
+    <p>Select value to change (grey background).</p>
+    <p>Change 
+        <strong>{{httpsrv.selectData.oldValue}}</strong>
+        <input [(ngModel)]="dataChanged" type="text">
+        <button (click)="changeData(dataChanged)">CHANGE USER DATA</button>
+    </p>
+</div>
+
+<div class="bgcolor3">
+    <button (click)="httpsrv.create()">CREATE NEW USER</button>
+</div>
+
+<div class="bgcolor4">
+    <ul>
+        <li>{{recData |json}}
+            <select class="width50" [(ngModel)]="selected" (change)="selectItem(selected)">
+            <option  *ngFor="let recData2 of httpsrv.receivedGetData" value="{{recData2._id}}">{{recData2._id}}</option>
+        </select>
+        </li>
+    </ul><button (click)="deleteButton()">DELETE USER</button>
+</div>

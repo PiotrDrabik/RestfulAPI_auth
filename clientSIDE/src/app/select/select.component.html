@@ -1,0 +1,8 @@
+<select class="width50" [(ngModel)]="selected" (change)="changeList(listData._id, selected)" [disabled]="httpsrv.inputDisabled">
+    <option value=""></option>
+    <option value="nip: {{listData.nip}}">NIP: {{listData.nip}}</option>
+    <option value="name: {{listData.name}}">NAME: {{listData.name}}</option>
+    <option value="firstname: {{listData.firstname}}">FIRSTNAME: {{listData.firstname}}</option>
+    <option value="lastname: {{listData.lastname}}">LASTNAME: {{listData.lastname}}</option>
+    <option value="phone: {{listData.phone}}">E-MAIL: {{listData.email}}</option>
+</select>

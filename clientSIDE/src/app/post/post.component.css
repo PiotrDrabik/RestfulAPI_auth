@@ -1,0 +1,24 @@
+.width50 {
+    width: 50%;
+    background-color: lightgrey;
+}
+
+.bgcolor, .bgcolor > * {
+    background-color: lightgreen;
+}
+
+.bgcolor2 {
+    background-color: pink;
+}
+
+.bgcolor3 {
+    background-color: #F2F0E6;
+}
+
+.bgcolor4 {
+    background-color: #E9D66B;
+}
+
+div {
+    padding: 1%;
+}
