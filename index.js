@@ -33,5 +33,5 @@ app.use(function(req, res, next) {
 app.use('/authuser',userapi);
 
 app.listen(port, function() {
-    console.log(`It's a kind of magic is at  ${port}`);
+    console.log(`It's a kind of magic at ${port}`);
 })

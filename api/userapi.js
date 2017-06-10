@@ -55,6 +55,34 @@ var strategy = new JwtStrategy(jwtOptions, function (jwt_payload, done) {
 
 passport.use(strategy);
 
+const roleArgument = {
+    id : null, 
+    resolve : null, 
+    reject : null,
+    set : function() {
+        roleArgument.id = this.id, 
+        roleArgument.resolve = this.resolve, 
+        roleArgument.reject = this.reject
+    }
+};
+
+const admCheckArgs = {
+    res : null, 
+    userId : null, 
+    next : null, 
+    id : null, 
+    changeUser : null, 
+    order : null,
+    set : function() {
+        admCheckArgs.res = this.res, 
+        admCheckArgs.userId = this.userId, 
+        admCheckArgs.next = this.next || null,
+        admCheckArgs.id = this.id || null,
+        admCheckArgs.changeUser = this.changeUser || null, 
+        admCheckArgs.order = this.order
+    }
+};
+
 // login user
 routerUser.post('/login', loginUser);
 
@@ -113,11 +141,11 @@ function getUsers(req, res, next) {
     let token = req.get('Authorization');
     var decoded = jwt.verify(token.substring(4, token.length), jwtOptions.secretOrKey);
     new Promise((resolve, reject) => {
-        const roleArgument = {
+        roleArgument.set.call({
             id : decoded._id, 
             resolve : resolve, 
             reject : reject
-        }
+        })
         roleCheck(roleArgument)
     }).then((resolve) => {
         let query = checkQueryAdmin(resolve, decoded._id);
@@ -177,8 +205,9 @@ routerUser.post('/user', passport.authenticate('jwt', { session: false }), postU
 
 function postUser(req, res) {
     var userdata = new Authuser(req.body);
-    if ((userdata.nip === null) || (userdata.nip === undefined) || (userdata.password === null) || (userdata.password === undefined)) {
-        return res.status(400).json({'message': 'NIP and Password musn\'t be empty'});
+    if ((userdata.nip === null) || (userdata.nip === undefined) || 
+        (userdata.password === null) || (userdata.password === undefined)) {
+            return res.status(400).json({'message': 'NIP and Password musn\'t be empty'});
     }
     bcrypt.hash(userdata.password, saltRounds, function (err, hash) {
         if (err) {
@@ -208,59 +237,88 @@ function putUser(req, res, next) {
     let changeUser = req.body;
     let token = req.get('Authorization');
     let decoded = jwt.verify(token.substring(4, token.length), jwtOptions.secretOrKey);
-    if (userId === {}) {
-        return res.status(400).json({ 'message': 'empty query /user/:userid' });
-    }
-    if (JSON.stringify(changeUser) === JSON.stringify({})) {
-        return res.status(400).json({ 'message': 'empty body, no data to change'});
-    }
+    if ((checkEmptyQuery(userId, res)!==true)||
+        (checkJsonBody(changeUser, res)!==true)) {
+            return null;
+        }
     // user is trying to change it's own data
     if (userId._id === decoded._id) {
         userChange(res, userId, changeUser);
     }
     // user is trying to change someone else's data
     if (userId._id !== decoded._id) {
-        admCheckArgs = {
+        admCheckArgs.set.call({
             res : res, 
             userId : userId, 
             next : next, 
             id : decoded._id, 
             changeUser : changeUser, 
             order : 'change'
-        }
+        })
         adminCheck(admCheckArgs)
     }
 };
 
+function checkEmptyQuery(query, res) {
+    if (query === {}) {
+        return res.status(400).json({ 'message': 'empty query /user/:userid' });
+    }
+    return true;
+};
+
+function checkJsonBody(body, res) {
+    // body contains JSON?
+    try {
+        JSON.stringify(body);
+    } catch (e) {
+        return res.status(400).json({ 'message': 'this isn\'t correct JSON' });
+    }
+    // body is empty?
+    if (JSON.stringify(body) === JSON.stringify({})) {
+        return res.status(400).json({ 'message': 'empty body, no data to change'});
+    }
+    return true;
+};
+
 function adminCheck(admArgs) {
     new Promise((resolve, reject) => {
-            const roleArgument = {
+            roleArgument.set.call({
                 id : admArgs.id, 
                 resolve : resolve, 
                 reject : reject
-            }
+            })
             roleCheck(roleArgument)
         }).then((resolve) => {
             if (resolve==='admin') {
-                if (admArgs.order==='delete') {
-                    userRemove(admArgs.res, admArgs.userId);
-                } else if (admArgs.order==='change') {
-                    userChange(admArgs.res, admArgs.userId, admArgs.changeUser ? admArgs.changeUser : {});
-                }
+                 admCheckArgs.set.call({
+                      res : admArgs.res, 
+                      userId : admArgs.userId,
+                      changeUser : admArgs.changeUser,
+                      order : admArgs.order
+                 });
+                 actionDelChange(admCheckArgs)
             } else {
                 return admArgs.res.status(401).json({ 'message': 'Only admin can change this data'});
             }
         }).catch((reject) => {
-        promiseProblem(reject, admArgs.res);
-    });    
-}
+            promiseProblem(reject, admArgs.res);
+        });    
+};
 
-function userChange(res, userId, changeUser) {
-    Authuser.findOneAndUpdate(userId, changeUser, {}, (err, changeUser) => {
+function actionDelChange(admCheckArgs) {
+    if (admCheckArgs.order==='delete') {
+         userRemove(admCheckArgs);
+    } else if (admCheckArgs.order==='change') {
+         userChange(admCheckArgs);
+    }
+};
+
+function userChange(admCheckArgs) {
+    Authuser.findOneAndUpdate(admCheckArgs.userId, admCheckArgs.changeUser, {}, (err, changeUser) => {
 		if(err){
-            return res.status(503).json({ 'message': err.message });
+            return admCheckArgs.res.status(503).json({ 'message': err.message });
 		}
-		res.json(changeUser);
+		admCheckArgs.res.json(changeUser);
 	});
 };
 
@@ -279,24 +337,25 @@ function deleteUser(req, res, next) {
     }
     // user is trying to change someone else's data
     if (userId._id !== decoded._id) {
-        admCheckArgs = {
+        admCheckArgs.set.call({
             res : res, 
             userId : userId, 
             next : next, 
             id : decoded._id, 
+            changeUser : null, 
             order : 'delete'
-        }
+        });
         adminCheck(admCheckArgs)
     }
 }; 
 
-function userRemove(res, userId) {
-    Authuser.remove(userId, (err, changeUser) => {
+function userRemove(admCheckArgs) { //res, userId) {
+    Authuser.remove(admCheckArgs.userId, (err, changeUser) => {
 		if(err){
-            return res.status(503).json({ 'message': err.message });
+            return admCheckArgs.res.status(503).json({ 'message': err.message });
 		}
-		res.json({
-            '_id' : userId._id,
+		admCheckArgs.res.json({
+            '_id' : admCheckArgs.userId._id,
             'message' : 'account was deleted'
         });
 	});
