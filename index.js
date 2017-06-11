@@ -12,7 +12,7 @@ const mongoose = require('mongoose');
 
 var passport = require("passport");
 
-mongoose.connect("mongodb://piotr1:0@ds145369.mlab.com:45369/products");
+mongoose.connect("#");
 mongoose.Promise = global.Promise;
 
 app.use(passport.initialize());
