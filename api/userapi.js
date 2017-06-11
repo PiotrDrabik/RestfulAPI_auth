@@ -1,46 +1,25 @@
 const express = require('express');
-const mongoose = require('mongoose');
-var uniqueValidator = require('mongoose-unique-validator');
+
 const routerUser = express.Router();
-var bcrypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
-var jwt = require('jsonwebtoken');
-var passport = require('passport');
-var passportJWT = require('passport-jwt');
-var ExtractJwt = passportJWT.ExtractJwt;
-var JwtStrategy = passportJWT.Strategy;
+const jwt = require('jsonwebtoken');
+const passport = require('passport');
+const passportJWT = require('passport-jwt');
+const ExtractJwt = passportJWT.ExtractJwt;
+const JwtStrategy = passportJWT.Strategy;
 
-const schemaAuth = new mongoose.Schema({
-    nip: {
-        type: Number,
-        require: true,
-        unique: true,
-    },
-    name: String,
-    firstname: String,
-    lastname: String,
-    phone: Number,
-    email: String,
-    password: {
-        type: String,
-        required: true,
-        select: false, //exclude password from request ex. Authuser.find
-    },
-    role: [],
-    reg_time: { type: Date, default: Date.now }
-});
-
-const Authuser = mongoose.model('Authuser', schemaAuth);
-// to deal with unique items (prevent from saving it)
-schemaAuth.plugin(uniqueValidator, { message: 'Error, expected {PATH} to be unique.' });
+const schemas = require('./schemas');
+const Authuser = schemas.Authuser;
+const dbAction = require('./dbaction.js');
 
 var jwtOptions = {}
 jwtOptions.jwtFromRequest = ExtractJwt.fromAuthHeader();
 jwtOptions.secretOrKey = require('./~key/key.json').key;
 var expirationTime = '2h'; //eg: 1d, 10h, 20m, doc: https://www.npmjs.com/package/jsonwebtoken
 
-var strategy = new JwtStrategy(jwtOptions, function (jwt_payload, done) {
+const strategy = new JwtStrategy(jwtOptions, function (jwt_payload, done) {
     Authuser.findOne({ '_id': jwt_payload._id }, function (err, user) {
         if (err) {
             return done(err, false);
@@ -55,33 +34,8 @@ var strategy = new JwtStrategy(jwtOptions, function (jwt_payload, done) {
 
 passport.use(strategy);
 
-const roleArgument = {
-    id : null, 
-    resolve : null, 
-    reject : null,
-    set : function() {
-        roleArgument.id = this.id, 
-        roleArgument.resolve = this.resolve, 
-        roleArgument.reject = this.reject
-    }
-};
-
-const admCheckArgs = {
-    res : null, 
-    userId : null, 
-    next : null, 
-    id : null, 
-    changeUser : null, 
-    order : null,
-    set : function() {
-        admCheckArgs.res = this.res, 
-        admCheckArgs.userId = this.userId, 
-        admCheckArgs.next = this.next || null,
-        admCheckArgs.id = this.id || null,
-        admCheckArgs.changeUser = this.changeUser || null, 
-        admCheckArgs.order = this.order
-    }
-};
+var roleArgument = schemas.roleArgument;
+var admCheckArgs = schemas.admCheckArgs;
 
 // login user
 routerUser.post('/login', loginUser);
@@ -145,11 +99,11 @@ function getUsers(req, res, next) {
             id : decoded._id, 
             resolve : resolve, 
             reject : reject
-        })
-        roleCheck(roleArgument)
+        });
+        dbAction.roleCheck(roleArgument)
     }).then((resolve) => {
         let query = checkQueryAdmin(resolve, decoded._id);
-        userList(res, query);
+        dbAction.userList(res, query);
     }).catch((reject) => {
         promiseProblem(reject,res);
     });
@@ -168,36 +122,6 @@ function checkQueryAdmin(query, id) {
 function promiseProblem(reject, res) {
     console.log('Handle rejected promise ('+reject+') here.');
     return res.status(500).json({ 'message': 'problem with permissions' });
-};
-
-function roleCheck(roleArgument) {
-    Authuser.findOne({ '_id': roleArgument.id }, function (err, user) {
-        if (err) {
-            roleArgument.reject(err, false);
-        }
-        if (user) {
-            roleArgument.resolve(returnRoleName(user.role));
-        }
-    });
-};
-
-function returnRoleName(roleArray) {
-    let role = '';
-    roleArray.forEach((element, index, array) => {
-    if (element === 'admin') {
-        role = 'admin';
-    } else {
-         role = (role!=='') ? role : element;
-        }
-    });
-    return role;
-}
-
-function userList(res, query) {
-    Authuser.find(query)
-        .exec(function (err, users) {
-            res.send(users);
-        });
 };
 
 // new user
@@ -243,7 +167,7 @@ function putUser(req, res, next) {
         }
     // user is trying to change it's own data
     if (userId._id === decoded._id) {
-        userChange(res, userId, changeUser);
+        dbAction.userChange(res, userId, changeUser);
     }
     // user is trying to change someone else's data
     if (userId._id !== decoded._id) {
@@ -287,7 +211,7 @@ function adminCheck(admArgs) {
                 resolve : resolve, 
                 reject : reject
             })
-            roleCheck(roleArgument)
+            dbAction.roleCheck(roleArgument)
         }).then((resolve) => {
             if (resolve==='admin') {
                  admCheckArgs.set.call({
@@ -296,7 +220,7 @@ function adminCheck(admArgs) {
                       changeUser : admArgs.changeUser,
                       order : admArgs.order
                  });
-                 actionDelChange(admCheckArgs)
+                 dbAction.actionDelChange(admCheckArgs);
             } else {
                 return admArgs.res.status(401).json({ 'message': 'Only admin can change this data'});
             }
@@ -305,23 +229,7 @@ function adminCheck(admArgs) {
         });    
 };
 
-function actionDelChange(admCheckArgs) {
-    if (admCheckArgs.order==='delete') {
-         userRemove(admCheckArgs);
-    } else if (admCheckArgs.order==='change') {
-         userChange(admCheckArgs);
-    }
-};
-
-function userChange(admCheckArgs) {
-    Authuser.findOneAndUpdate(admCheckArgs.userId, admCheckArgs.changeUser, {}, (err, changeUser) => {
-		if(err){
-            return admCheckArgs.res.status(503).json({ 'message': err.message });
-		}
-		admCheckArgs.res.json(changeUser);
-	});
-};
-
+// delete user
 routerUser.delete('/user/:userid', passport.authenticate('jwt', { session: false }), deleteUser);
 
 function deleteUser(req, res, next) {
@@ -331,11 +239,11 @@ function deleteUser(req, res, next) {
     if (userId=={}) {
         return res.status(400).json({ 'message': 'empty query /user/:userid' });
     }
-    // user is trying to change it's own data
+    // user is trying to delete it's own data
     if (userId._id === decoded._id) {
-        userRemove(res, userId);
+        dbAction.userRemove(res, userId);
     }
-    // user is trying to change someone else's data
+    // user is trying to delete someone else's data
     if (userId._id !== decoded._id) {
         admCheckArgs.set.call({
             res : res, 
@@ -348,17 +256,5 @@ function deleteUser(req, res, next) {
         adminCheck(admCheckArgs)
     }
 }; 
-
-function userRemove(admCheckArgs) { //res, userId) {
-    Authuser.remove(admCheckArgs.userId, (err, changeUser) => {
-		if(err){
-            return admCheckArgs.res.status(503).json({ 'message': err.message });
-		}
-		admCheckArgs.res.json({
-            '_id' : admCheckArgs.userId._id,
-            'message' : 'account was deleted'
-        });
-	});
-};
 
 module.exports = routerUser;
